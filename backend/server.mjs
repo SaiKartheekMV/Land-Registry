@@ -1,7 +1,7 @@
-const dotenv = require("dotenv");
-const express = require("express");
-const cors = require("cors");
-const Web3 = require("web3");
+import dotenv from "dotenv";
+import express from "express";
+import cors from "cors";
+import Web3 from "web3";
 
 dotenv.config();
 
@@ -21,4 +21,3 @@ app.listen(PORT, () => {
     console.log(`✅ Server running on http://localhost:${PORT}`);
 });
 
-console.log("Web3 is connected :-", web3);
