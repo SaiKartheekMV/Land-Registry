@@ -10,21 +10,21 @@ contract LandRegistry {
     }
 
     mapping(uint => Land) public lands;
-    uint public landCount = 0;
+    uint public landCount;
 
-    event LandRegistered(uint id, address indexed owner, string location, uint price);
+    event LandRegistered(uint indexed id, address indexed owner, string location, uint price);
+
+    constructor() {
+        landCount = 0; // Initializing land count
+    }
 
     function registerLand(string memory _location, uint _price) public {
+        require(bytes(_location).length > 0, "Location cannot be empty");
         require(_price > 0, "Price must be greater than zero");
 
         landCount++;
         lands[landCount] = Land(landCount, msg.sender, _location, _price);
 
         emit LandRegistered(landCount, msg.sender, _location, _price);
-    }
-
-    function getLand(uint _id) public view returns (Land memory) {
-        require(_id > 0 && _id <= landCount, "Invalid land ID");
-        return lands[_id];
     }
 }
