@@ -4,8 +4,9 @@ async function main() {
     const LandRegistry = await hre.ethers.getContractFactory("LandRegistry");
     const landRegistry = await LandRegistry.deploy();
 
-    await landRegistry.waitForDeployment(); 
-    console.log("LandRegistry deployed to:",await landRegistry.getAddress());
+    await landRegistry.waitForDeployment();
+    
+    console.log(`LandRegistry deployed to: ${landRegistry.target}`);
 }
 
 main().catch((error) => {
