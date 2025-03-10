@@ -134,4 +134,18 @@ contract LandRegistry {
     function verifyKYC(address _user, bool _status) public onlyOwner {
         isKYCVerified[_user] = _status;
     }
+
+
+    function getLandDetails(uint _id) public view returns (
+        uint id,
+        address landOwner,
+        string memory location,
+        uint price,
+        bool forSale,
+        bool isVerified
+    ){
+        require(lands[_id].id != 0, "Land does not exist");
+        Land storage land = lands[_id];
+        return (land.id, land.owner, land.location, land.price, land.forSale, land.isVerified);
+    }
 }
