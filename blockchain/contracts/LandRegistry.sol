@@ -6,6 +6,13 @@ contract LandRegistry {
     uint private landCounter;
     bool private locked; // Reentrancy lock
 
+    struct User {
+        string name;
+        string email;
+        string phone;
+        bool isVerified;
+    }
+
     struct Land {
         uint id;
         address owner;
@@ -13,6 +20,7 @@ contract LandRegistry {
         uint price;
         bool forSale;
         bool isVerified;
+        bool isAuctioned;
     }
 
     struct Auction {
@@ -22,10 +30,13 @@ contract LandRegistry {
         bool isActive;
     }
 
+    mapping(address => User) public users;
     mapping(uint => Land) public lands;
     mapping(uint => Auction) public auctions;
-    mapping(address => bool) public isKYCVerified;
+    mapping(address => bool) public isRegistered;
 
+    event UserRegistered(address user, string name, string email, string phone);
+    event UserVerified(address user);
     event LandRegistered(uint id, address owner, string location, uint price);
     event LandVerified(uint id, bool status);
     event LandTransferred(uint id, address newOwner, uint price);
@@ -44,8 +55,8 @@ contract LandRegistry {
         _;
     }
 
-    modifier onlyKYCVerified() {
-        require(isKYCVerified[msg.sender], "User is not KYC verified");
+    modifier onlyVerifiedUser() {
+        require(users[msg.sender].isVerified, "User is not verified");
         _;
     }
 
@@ -57,12 +68,25 @@ contract LandRegistry {
     }
 
     constructor() {
-        owner = msg.sender; // The deployer becomes the owner
+        owner = msg.sender;
     }
 
-    function registerLand(string memory _location, uint _price) public onlyKYCVerified {
+    function registerUser(string memory _name, string memory _email, string memory _phone) public {
+        require(!isRegistered[msg.sender], "User already registered");
+        users[msg.sender] = User(_name, _email, _phone, false);
+        isRegistered[msg.sender] = true;
+        emit UserRegistered(msg.sender, _name, _email, _phone);
+    }
+
+    function verifyUser(address _user) public onlyOwner {
+        require(isRegistered[_user], "User must be registered first");
+        users[_user].isVerified = true;
+        emit UserVerified(_user);
+    }
+
+    function registerLand(string memory _location, uint _price) public onlyVerifiedUser {
         landCounter++;
-        lands[landCounter] = Land(landCounter, msg.sender, _location, _price, false, false);
+        lands[landCounter] = Land(landCounter, msg.sender, _location, _price, false, false, false);
         emit LandRegistered(landCounter, msg.sender, _location, _price);
     }
 
@@ -72,25 +96,29 @@ contract LandRegistry {
         emit LandVerified(_id, _status);
     }
 
-    function putLandForSale(uint _id, uint _price) public onlyLandOwner(_id) {
+    function transferOwnership(uint _id, address _newOwner) public onlyLandOwner(_id) {
+        require(users[_newOwner].isVerified, "New owner is not verified");
+        lands[_id].owner = _newOwner;
+        emit LandTransferred(_id, _newOwner, lands[_id].price);
+    }
+
+    function listLandForSale(uint _id, uint _price) public onlyLandOwner(_id) {
         require(lands[_id].isVerified, "Land is not verified");
         lands[_id].price = _price;
         lands[_id].forSale = true;
         emit LandListedForSale(_id, _price);
     }
 
-    function buyLand(uint _id) public payable onlyKYCVerified noReentrancy {
+    function buyLand(uint _id) public payable onlyVerifiedUser noReentrancy {
         require(lands[_id].forSale, "Land is not for sale");
         require(msg.value >= lands[_id].price, "Insufficient payment");
 
         address previousOwner = lands[_id].owner;
         uint salePrice = lands[_id].price;
 
-        // **Effects First** (State Update Before External Call)
         lands[_id].owner = msg.sender;
         lands[_id].forSale = false;
 
-        // **Secure Payment Transfer** (Avoid `transfer()` and Use `call()`)
         (bool sent, ) = previousOwner.call{value: salePrice}("");
         require(sent, "Payment failed");
 
@@ -100,10 +128,11 @@ contract LandRegistry {
     function startAuction(uint _id, uint _startPrice) public onlyLandOwner(_id) {
         require(lands[_id].isVerified, "Land is not verified");
         auctions[_id] = Auction(_id, address(0), _startPrice, true);
+        lands[_id].isAuctioned = true;
         emit AuctionStarted(_id, _startPrice);
     }
 
-    function placeBid(uint _id) public payable onlyKYCVerified {
+    function placeBid(uint _id) public payable onlyVerifiedUser {
         require(auctions[_id].isActive, "Auction is not active");
         require(msg.value > auctions[_id].highestBid, "Bid must be higher than current highest");
 
@@ -120,6 +149,7 @@ contract LandRegistry {
     function endAuction(uint _id) public onlyLandOwner(_id) {
         require(auctions[_id].isActive, "Auction is not active");
         auctions[_id].isActive = false;
+        lands[_id].isAuctioned = false;
 
         if (auctions[_id].highestBidder != address(0)) {
             (bool sent, ) = lands[_id].owner.call{value: auctions[_id].highestBid}("");
@@ -129,23 +159,5 @@ contract LandRegistry {
         }
 
         emit AuctionEnded(_id, auctions[_id].highestBidder, auctions[_id].highestBid);
-    }
-
-    function verifyKYC(address _user, bool _status) public onlyOwner {
-        isKYCVerified[_user] = _status;
-    }
-
-
-    function getLandDetails(uint _id) public view returns (
-        uint id,
-        address landOwner,
-        string memory location,
-        uint price,
-        bool forSale,
-        bool isVerified
-    ){
-        require(lands[_id].id != 0, "Land does not exist");
-        Land storage land = lands[_id];
-        return (land.id, land.owner, land.location, land.price, land.forSale, land.isVerified);
     }
 }
