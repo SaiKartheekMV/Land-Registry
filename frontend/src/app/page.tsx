@@ -4,7 +4,7 @@ import { useAccount, useDisconnect } from "wagmi";
 import { useState } from "react";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { ethers } from "ethers";
-import landRegistryABI from "../utils/landRegistryABI.json" assert { type: "json" };
+import landRegistryABI from "../utils/landRegistryABI.json"; // ✅ Correct relative path
 import { motion } from "framer-motion";
 
 const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS!;
@@ -26,7 +26,7 @@ export default function Home() {
       }
 
       const provider = new ethers.BrowserProvider(window.ethereum);
-      const contract = new ethers.Contract(CONTRACT_ADDRESS, landRegistryABI, provider);
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, landRegistryABI.abi, provider);
       const ownerAddress = await contract.owner();
       setOwner(ownerAddress);
       setError(null);
