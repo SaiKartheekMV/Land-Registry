@@ -1,22 +1,36 @@
 "use client";
 
 import { useAccount, useDisconnect } from "wagmi";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { ethers } from "ethers";
-import landRegistryABI from "../utils/landRegistryABI.json"; // ✅ Correct relative path
+import landRegistryABI from "@/utils/landRegistryABI.json";
 import { motion } from "framer-motion";
 
 const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS!;
-if (!CONTRACT_ADDRESS) {
-  throw new Error("❌ NEXT_PUBLIC_CONTRACT_ADDRESS is missing from .env.local");
-}
 
 export default function Home() {
   const { address, isConnected } = useAccount();
   const { disconnect } = useDisconnect();
   const [owner, setOwner] = useState<string | null>(null);
+  const [availableLands, setAvailableLands] = useState<any[]>([]);
+  const [isRegistered, setIsRegistered] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    if (isConnected) {
+      checkUserRegistration();
+      fetchAvailableLands();
+    }
+  }, [isConnected]);
+
+  const getContract = async () => {
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    return new ethers.Contract(CONTRACT_ADDRESS, landRegistryABI.abi, provider);
+  };
 
   const getOwner = async () => {
     try {
@@ -25,37 +39,58 @@ export default function Home() {
         return;
       }
 
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const contract = new ethers.Contract(CONTRACT_ADDRESS, landRegistryABI.abi, provider);
+      setLoading(true);
+      const contract = await getContract();
       const ownerAddress = await contract.owner();
       setOwner(ownerAddress);
       setError(null);
     } catch (err) {
       console.error(err);
-      setError("Error fetching owner address.");
+      setError("Error fetching contract owner.");
+    } finally {
+      setLoading(false);
     }
   };
 
-  return (
-    <main className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-green-900 via-green-800 to-green-900 text-white p-6">
-      {/* Header Section */}
-      <header className="w-full flex justify-between items-center p-4 bg-green-800 shadow-lg border-b border-yellow-500/50 rounded-lg">
-        <motion.h1
-          className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-yellow-500 to-orange-400 drop-shadow-lg"
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 1 }}
-        >
-          Land Registry DApp
-        </motion.h1>
-        <ConnectButton />
-      </header>
+  const checkUserRegistration = async () => {
+    try {
+      const contract = await getContract();
+      const registered = await contract.isRegistered(address);
+      setIsRegistered(registered);
+    } catch (err) {
+      console.error(err);
+      setError("Error checking registration status.");
+    }
+  };
 
-      {/* Main Content */}
-      <section className="flex flex-col md:flex-row items-center justify-center gap-6 mt-10 w-full max-w-5xl">
-        {/* Wallet Section */}
+  const fetchAvailableLands = async () => {
+    try {
+      setLoading(true);
+      const contract = await getContract();
+      const lands = await contract.getAvailableLands();
+      setAvailableLands(lands);
+      setError(null);
+    } catch (err) {
+      console.error(err);
+      setError("Error fetching lands.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!mounted) return null; // Prevent SSR issues
+
+  return (
+    <main className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-blue-900 via-blue-800 to-blue-900 text-white p-6">
+      <motion.section
+        className="flex flex-col md:flex-row items-center justify-center gap-6 mt-10 w-full max-w-5xl"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.8 }}
+      >
+        {/* Wallet & Actions */}
         <motion.div
-          className="bg-green-800 shadow-2xl rounded-2xl p-8 w-full max-w-lg text-center border border-yellow-500/50"
+          className="bg-blue-800 shadow-2xl rounded-2xl p-8 w-full max-w-lg text-center border border-yellow-500/50"
           initial={{ scale: 0.8, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ duration: 0.8 }}
@@ -70,7 +105,7 @@ export default function Home() {
                 whileTap={{ scale: 0.95 }}
                 onClick={getOwner}
               >
-                Get Contract Owner
+                {loading ? "Fetching Owner..." : "Get Contract Owner"}
               </motion.button>
               <motion.button
                 className="mt-4 bg-red-500 hover:bg-red-600 px-5 py-2 rounded-lg text-white transition-all duration-300 shadow-md hover:shadow-lg"
@@ -86,31 +121,57 @@ export default function Home() {
           )}
         </motion.div>
 
-        {/* Contract Info Section */}
+        {/* Contract Info */}
         <motion.div
-          className="bg-green-900 shadow-xl rounded-2xl p-8 w-full max-w-lg text-center border border-yellow-500/50"
+          className="bg-blue-900 shadow-xl rounded-2xl p-8 w-full max-w-lg text-center border border-yellow-500/50"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8 }}
         >
           <h2 className="text-xl font-semibold text-yellow-400">Contract Information</h2>
           {owner ? (
-            <p className="mt-4 text-yellow-300 bg-green-800 px-4 py-2 rounded-lg border border-yellow-500 shadow-md">
+            <p className="mt-4 text-yellow-300 bg-blue-800 px-4 py-2 rounded-lg border border-yellow-500 shadow-md">
               Owner Address: {owner}
             </p>
           ) : (
             <p className="text-yellow-300 mt-2">No owner data fetched yet.</p>
           )}
-          {error && (
-            <p className="mt-4 text-red-400">{error}</p>
-          )}
+          {error && <p className="mt-4 text-red-400">{error}</p>}
         </motion.div>
-      </section>
+      </motion.section>
 
-      {/* Footer Section */}
-      <footer className="mt-10 w-full text-center p-4 text-yellow-400 bg-green-800 rounded-lg border-t border-yellow-500/50">
-        <p>© {new Date().getFullYear()} Land Registry DApp - Built with Web3</p>
-      </footer>
+      {/* Land Listings */}
+      <motion.section
+        className="mt-10 bg-blue-800 shadow-xl rounded-2xl p-8 w-full max-w-5xl border border-yellow-500/50"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.8 }}
+      >
+        <h2 className="text-2xl font-semibold text-yellow-400 text-center">Available Lands for Sale</h2>
+        {loading ? (
+          <p className="text-center text-yellow-300 mt-4">Loading...</p>
+        ) : availableLands.length > 0 ? (
+          <div className="grid md:grid-cols-2 gap-6 mt-6">
+            {availableLands.map((land, index) => (
+              <div
+                key={index}
+                className="bg-blue-900 p-4 rounded-lg shadow-md border border-yellow-500"
+              >
+                <p className="text-yellow-300">🏡 <b>Location:</b> {land.location}</p>
+                <p className="text-yellow-400">💰 <b>Price:</b> {ethers.formatEther(land.price)} ETH</p>
+                <p className="text-yellow-500">🆔 <b>Land ID:</b> {land.id.toString()}</p>
+                <button
+                  className="mt-3 bg-green-600 hover:bg-green-700 px-5 py-2 rounded-lg text-white transition-all duration-300 shadow-md hover:shadow-lg"
+                >
+                  Buy Land
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-yellow-300 text-center mt-4">No lands available for sale.</p>
+        )}
+      </motion.section>
     </main>
   );
 }
